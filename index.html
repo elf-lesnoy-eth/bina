@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>EasyHome — Dashboard</title>
+  <!-- Tailwind -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Telegram WebApp SDK -->
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <!-- PapaParse for CSV -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <style>
+    .tile { background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02)); }
+    .shadow-soft { box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+    .lightbox{position:fixed;inset:0;background:rgba(0,0,0,.85);display:none;align-items:center;justify-content:center;z-index:50}
+    .lightbox.open{display:flex}
+    .lightbox img{max-width:92vw;max-height:86vh;border-radius:1rem}
+  </style>
+</head>
+<body class="min-h-screen bg-[#0b0f14] text-slate-100">
+  <div id="app" class="mx-auto max-w-3xl p-4 space-y-5">
+    <!-- Header -->
+    <header class="flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-xl grid place-items-center bg-emerald-500/15 text-emerald-300 text-lg">🏠</div>
+        <div class="flex items-center gap-2">
+          <h1 class="text-xl font-semibold tracking-wide">EasyHome</h1>
+          <span class="text-[11px] px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-300 border border-sky-500/30">verified</span>
+        </div>
+      </div>
+      <button id="refreshBtn" class="px-3 py-2 rounded-xl bg-white/5">🔄</button>
+    </header>
+
+    <!-- Feature tiles (как в примере) -->
+    <section class="grid grid-cols-2 gap-3">
+      <div class="tile rounded-2xl p-4 shadow-soft"><div class="text-sm font-medium">Новая фича: промокоды</div></div>
+      <div class="tile rounded-2xl p-4 shadow-soft"><div class="text-sm font-medium">Новый способ заработка</div></div>
+      <div class="tile rounded-2xl p-4 shadow-soft"><div class="text-sm font-medium">Как добавить менеджера в канал</div></div>
+      <div class="tile rounded-2xl p-4 shadow-soft"><div class="text-sm font-medium">Физические товары: как добавить</div></div>
+    </section>
+
+    <!-- Revenue card -->
+    <section class="rounded-2xl p-0 overflow-hidden shadow-soft bg-[#0f141a] border border-white/5">
+      <div class="p-4 flex items-start justify-between">
+        <div>
+          <div class="text-base">Ваш доход</div>
+          <div id="totalAmount" class="text-4xl font-bold leading-none mt-2">0 GEL</div>
+        </div>
+        <span class="px-2.5 py-1 rounded-lg text-[12px] bg-amber-400/10 text-amber-300 border border-amber-400/30">⚡ Energy</span>
+      </div>
+      <div class="bg-emerald-500 text-slate-900 text-sm font-medium px-4 py-3">+ Комиссия 0% на первые 30 000 ₽</div>
+      <div class="p-4 text-xs text-slate-400" id="tenantMeta"></div>
+    </section>
+
+    <!-- Action buttons -->
+    <section class="grid grid-cols-3 gap-3">
+      <button id="payoutsBtn" class="rounded-2xl px-4 py-3 bg-white/5 border border-white/10">Выплаты</button>
+      <button id="statsBtn" class="rounded-2xl px-4 py-3 bg-white/5 border border-white/10">Статистика</button>
+      <button id="moreBtn" class="rounded-2xl px-4 py-3 bg-white/5 border border-white/10">Ещё</button>
+    </section>
+
+    <!-- Photos -->
+    <section id="photosSection" class="rounded-2xl p-4 bg-[#0f141a] border border-white/5">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-lg font-semibold">Фотографии</h2>
+        <div id="photosHint" class="text-sm text-slate-400"></div>
+      </div>
+      <div id="photosGrid" class="grid grid-cols-2 sm:grid-cols-3 gap-3"></div>
+    </section>
+
+    <!-- Payments table -->
+    <section id="statsSection" class="rounded-2xl p-4 bg-[#0f141a] border border-white/5">
+      <h2 class="text-lg font-semibold mb-3">Статистика платежей</h2>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="text-left text-slate-400">
+              <th class="py-2 pr-4">Дата</th>
+              <th class="py-2 pr-4">Описание</th>
+              <th class="py-2 pr-4">Сумма (GEL)</th>
+            </tr>
+          </thead>
+          <tbody id="paymentsBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer class="py-6 text-center text-xs text-slate-500">© EasyHome</footer>
+  </div>
+
+  <div id="lightbox" class="lightbox" role="dialog" aria-modal="true"><img alt="" /></div>
+
+<script>
+// ======== CONFIG ========
+const SHEET_TENANT_CSV_URL = "https://docs.google.com/spreadsheets/d/159-e05v0O6rpmC3Dlo-FPfmL8DLj5iL-_3XeVSvFY38/export?format=csv&gid=0";
+const SHEET_PAYMENTS_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTJMucwthLrL_6GLDUUMBJymZEsqZ79nAjQ1eAW7oPU53RYFyh1ocl2Xl0SqUKjBWNaVQ0TlaJqRHRz/pub?gid=746452148&single=true&output=csv";
+// Фото — обычные ссылки (в т.ч. Google Drive /file/d/ID/view)
+const PHOTOS_RAW = [
+  // 'https://drive.google.com/file/d/1qjndifv4p-rp9GfVIqecS7EWq2zws6gI/view?usp=share_link'
+];
+const PHOTOS = PHOTOS_RAW.map(toDriveDirect);
+
+// ======== THEME / TG ========
+const tg = window.Telegram?.WebApp; if (tg) { tg.ready(); tg.expand(); }
+function applyTheme(){
+  const p = tg?.themeParams || {};
+  document.body.style.background = p.bg_color || '#0b0f14';
+  document.body.style.color = p.text_color || '#e2e8f0';
+}
+applyTheme();
+
+// ======== HELPERS ========
+function toDriveDirect(u){
+  try{
+    const url = new URL(u);
+    if(url.hostname.includes('drive.google.com')){
+      let id = (url.pathname.match(/\/file\/d\/([^/]+)/)||[])[1] || url.searchParams.get('id');
+      if(id) return `https://drive.google.com/uc?export=view&id=${id}`;
+    }
+    return u;
+  }catch(e){ return u; }
+}
+function toDriveThumbnail(u){
+  try{
+    const url = new URL(u);
+    if(url.hostname.includes('drive.google.com')){
+      const id = url.searchParams.get('id') || (url.pathname.match(/\/file\/d\/([^/]+)/)||[])[1];
+      if(id) return `https://drive.google.com/thumbnail?id=${id}&sz=w2000`;
+    }
+    return u;
+  }catch(e){ return u; }
+}
+function toDriveDownload(u){
+  try{
+    const url = new URL(u);
+    if(url.hostname.includes('drive.google.com')){
+      const id = url.searchParams.get('id') || (url.pathname.match(/\/file\/d\/([^/]+)/)||[])[1];
+      if(id) return `https://drive.google.com/uc?export=download&id=${id}`;
+    }
+    return u;
+  }catch(e){ return u; }
+}
+function parseAmount(raw){
+  if(raw==null) return 0;
+  let s = String(raw).replace(/[A-Za-zА-Яа-я₾$€]|GEL|gel/g,'').replace(/\u00A0/g,'');
+  s = s.replace(/\s+/g,'');
+  if(s.includes(',') && s.includes('.')){
+    const c = s.lastIndexOf(','), d = s.lastIndexOf('.');
+    if(c>d){ s = s.replace(/\./g,'').replace(',', '.'); } else { s = s.replace(/,/g,''); }
+  } else if (s.includes(',')) { s = s.replace(',', '.'); }
+  const n = Number(s); return Number.isFinite(n)?n:0;
+}
+function fmt(n){ return n.toLocaleString('ru-RU',{maximumFractionDigits:2}); }
+async function fetchCSV(url){ const res=await fetch(url,{cache:'no-store'}); if(!res.ok) throw new Error('HTTP '+res.status); const text=await res.text(); const parsed=Papa.parse(text,{header:true,skipEmptyLines:true}); return parsed.data; }
+function buildTbcUrl(iban){ const clean=(iban||'').trim(); return clean?`https://tbconline.ge/MB/TT/${clean}`:'https://tbconline.ge/MB/TT/'; }
+
+// ======== RENDER ========
+async function loadAll(){
+  // Tenant
+  let tenantRows=[]; try{ tenantRows=await fetchCSV(SHEET_TENANT_CSV_URL);}catch(e){console.warn('tenant csv',e)}
+  const t=tenantRows[0]||{}; const owner=t.owner||t.Owner||''; const user=t.user||t.User||''; const phone=t.phone||t.Phone||''; const bina=t.bina_number||t.bina||t.number||''; const iban=t.account_money||t.Account_money||'';
+  document.getElementById('tenantMeta').textContent = [owner&&`Владелец: ${owner}`, user&&`Жилец: ${user}`, bina&&`Бина: ${bina}`, phone&&`Тел.: ${phone}`].filter(Boolean).join(' · ');
+  window._payUrl = buildTbcUrl(iban);
+
+  // Payments
+  let payments=[]; try{ payments = await fetchCSV(SHEET_PAYMENTS_CSV_URL);}catch(e){ console.warn('payments csv',e); }
+  const body=document.getElementById('paymentsBody'); body.innerHTML=''; let total=0;
+  payments.forEach(p=>{ const date=p.date||p.Date||''; const desc=p.desc||p.Description||p.DESCRIPTION||''; const amt=parseAmount(p.amount||p.Amount||p.AMOUNT||'0'); total+=amt; const tr=document.createElement('tr'); tr.innerHTML=`<td class='py-2 pr-4 whitespace-nowrap text-slate-200'>${date}</td><td class='py-2 pr-4 text-slate-300'>${desc}</td><td class='py-2 pr-4 whitespace-nowrap text-slate-100'>${fmt(amt)}</td>`; body.appendChild(tr); });
+  document.getElementById('totalAmount').textContent = `${fmt(total)} GEL`;
+
+  // Photos
+  const grid=document.getElementById('photosGrid'); const hint=document.getElementById('photosHint'); grid.innerHTML='';
+  if(!PHOTOS.length){ hint.textContent='Нет фото'; } else { hint.textContent = `${PHOTOS.length} фото`; }
+  PHOTOS.forEach((url)=>{ const a=document.createElement('a'); a.href='#'; a.className='block rounded-2xl overflow-hidden bg-white/5 border border-white/10'; const fb1=toDriveThumbnail(url); const fb2=toDriveDownload(url); a.innerHTML=`<img src='${url}' alt='' referrerpolicy='no-referrer' class='w-full h-36 object-cover' onerror="if(this.dataset.fbk!=='1'){this.dataset.fbk='1';this.src='${fb1}';} else if(this.dataset.fbk!=='2'){this.dataset.fbk='2';this.src='${fb2}';} else {this.onerror=null;}">`; a.addEventListener('click', (e)=>{ e.preventDefault(); openLightbox(url);}); grid.appendChild(a); });
+}
+function openLightbox(url){ const lb=document.getElementById('lightbox'); lb.querySelector('img').src=url; lb.classList.add('open'); }
+
+document.getElementById('lightbox').addEventListener('click', ()=>document.getElementById('lightbox').classList.remove('open'));
+
+document.getElementById('refreshBtn').addEventListener('click', async ()=>{ try{ await loadAll(); tg?.HapticFeedback?.impactOccurred('light'); }catch(e){} });
+document.getElementById('payoutsBtn').addEventListener('click', ()=>{ if(window._payUrl) window.open(window._payUrl, '_blank'); });
+document.getElementById('statsBtn').addEventListener('click', ()=>{ document.getElementById('statsSection').scrollIntoView({behavior:'smooth'}); });
+document.getElementById('moreBtn').addEventListener('click', ()=>{ document.getElementById('photosSection').scrollIntoView({behavior:'smooth'}); });
+
+loadAll();
+</script>
+</body>
+</html>
