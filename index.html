@@ -190,26 +190,44 @@ async function loadAll(){
 
   const tgUsername = tg?.initDataUnsafe?.user?.username;
   const normalizedUsername = normUsername(tgUsername);
-  const tenantRow = tenantRows.find((row) => normUsername(row.username) === normalizedUsername) || tenantRows[0] || {};
+  const fallbackTenant = !normalizedUsername && tenantRows.length ? tenantRows[0] : null;
+  const matchedTenant = normalizedUsername
+    ? tenantRows.find((row) => normUsername(row.username) === normalizedUsername) || null
+    : null;
+  const tenantRow = matchedTenant || fallbackTenant;
+  const activeUsername = tenantRow && tenantRow.username
+    ? normUsername(tenantRow.username)
+    : (matchedTenant ? normalizedUsername : '');
 
-  const owner = tenantRow.owner || tenantRow.landlord || PLACEHOLDER;
+  if (!tenantRow) {
+    totalEl.textContent = `Ваш доход: ${PLACEHOLDER}`;
+    tenantMetaEl.textContent = `Владелец: ${PLACEHOLDER} · Жилец: ${PLACEHOLDER} · Тел.: ${PLACEHOLDER} · Депозит: ${PLACEHOLDER} · Аренда: ${PLACEHOLDER} · Питомцы: ${PLACEHOLDER}`;
+    disableLink(pdfEl);
+    disableLink(photosLinkEl);
+    photosHint.textContent = 'Нет данных';
+    const emptyRow = document.createElement('tr');
+    emptyRow.innerHTML = `<td colspan='3' class='py-4 text-center text-slate-400'>Нет данных</td>`;
+    paymentsBody.appendChild(emptyRow);
+    window._payUrl = null;
+    return;
+  }
+
   const tenantName = tenantRow.name || PLACEHOLDER;
-  const phone = tenantRow.phone || tenantRow.contact_phone || PLACEHOLDER;
   const depositRaw = tenantRow.deposit;
-  const hasDeposit = depositRaw!=null && String(depositRaw).trim()!=='';
+  const hasDeposit = depositRaw != null && String(depositRaw).trim() !== '';
   const depositValue = hasDeposit && /\d/.test(String(depositRaw)) ? parseAmount(depositRaw) : null;
-  const depositText = depositValue!=null ? `${fmt(depositValue)} ₾` : PLACEHOLDER;
+  const depositText = depositValue != null ? `${fmt(depositValue)} ₾` : PLACEHOLDER;
   const rentRaw = tenantRow.monthly_rent;
-  const hasRent = rentRaw!=null && String(rentRaw).trim()!=='';
+  const hasRent = rentRaw != null && String(rentRaw).trim() !== '';
   const rentValue = hasRent && /\d/.test(String(rentRaw)) ? parseAmount(rentRaw) : null;
-  const rentText = rentValue!=null ? `${fmt(rentValue)} ₾` : PLACEHOLDER;
+  const rentText = rentValue != null ? `${fmt(rentValue)} ₾` : PLACEHOLDER;
   const petsText = tenantRow.pets || PLACEHOLDER;
   const pdfLink = tenantRow.pdf_link || '';
   const photosLink = tenantRow.photos_links || '';
   const photos = parsePhotos(tenantRow.photos_links);
   window._payUrl = pdfLink || photosLink || null;
 
-  tenantMetaEl.textContent = `Владелец: ${owner || PLACEHOLDER} · Жилец: ${tenantName} · Тел.: ${phone || PLACEHOLDER} · Депозит: ${depositText} · Аренда: ${rentText} · Питомцы: ${petsText}`;
+  tenantMetaEl.textContent = `Владелец: ${PLACEHOLDER} · Жилец: ${tenantName} · Тел.: ${PLACEHOLDER} · Депозит: ${depositText} · Аренда: ${rentText} · Питомцы: ${petsText}`;
 
   if (pdfLink) {
     enableLink(pdfEl, pdfLink);
@@ -223,8 +241,9 @@ async function loadAll(){
     disableLink(photosLinkEl);
   }
 
-  const targetUsername = tenantRow.username ? normUsername(tenantRow.username) : normalizedUsername;
-  const tenantPayments = paymentRows.filter((row) => normUsername(row.username) === targetUsername);
+  const tenantPayments = activeUsername
+    ? paymentRows.filter((row) => normUsername(row.username) === activeUsername)
+    : [];
   let total = 0;
   tenantPayments.forEach((payment) => {
     const date = payment.date || PLACEHOLDER;
@@ -242,11 +261,7 @@ async function loadAll(){
     paymentsBody.appendChild(tr);
   }
 
-  if (tenantPayments.length) {
-    totalEl.textContent = `Ваш доход: ${formatCurrency(total)}`;
-  } else {
-    totalEl.textContent = `Ваш доход: ${PLACEHOLDER}`;
-  }
+  totalEl.textContent = `Ваш доход: ${formatCurrency(total)}`;
 
   if (!photos.length) {
     photosHint.textContent = 'Нет фото';
