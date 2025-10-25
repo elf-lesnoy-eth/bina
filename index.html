@@ -51,6 +51,10 @@
       </div>
       <div class="bg-emerald-500 text-slate-900 text-sm font-medium px-4 py-3">+ Комиссия 0% на первые 30 000 ₽</div>
       <div class="p-4 text-xs text-slate-400" id="tenantMeta"></div>
+      <div class="px-4 pb-4 flex flex-wrap gap-3 text-sm">
+        <a id="pdfLink" class="inline-flex items-center gap-1 text-sky-300 hover:text-sky-200 transition-colors" href="#" target="_blank" rel="noopener">📄 Договор</a>
+        <a id="photosLink" class="inline-flex items-center gap-1 text-sky-300 hover:text-sky-200 transition-colors" href="#" target="_blank" rel="noopener">🖼️ Альбом</a>
+      </div>
     </section>
 
     <!-- Action buttons -->
@@ -93,13 +97,8 @@
 
 <script>
 // ======== CONFIG ========
-const SHEET_TENANT_CSV_URL = "https://docs.google.com/spreadsheets/d/159-e05v0O6rpmC3Dlo-FPfmL8DLj5iL-_3XeVSvFY38/export?format=csv&gid=0";
-const SHEET_PAYMENTS_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTJMucwthLrL_6GLDUUMBJymZEsqZ79nAjQ1eAW7oPU53RYFyh1ocl2Xl0SqUKjBWNaVQ0TlaJqRHRz/pub?gid=746452148&single=true&output=csv";
-// Фото — обычные ссылки (в т.ч. Google Drive /file/d/ID/view)
-const PHOTOS_RAW = [
-  // 'https://drive.google.com/file/d/1qjndifv4p-rp9GfVIqecS7EWq2zws6gI/view?usp=share_link'
-];
-const PHOTOS = PHOTOS_RAW.map(toDriveDirect);
+const TENANTS_URL = "https://docs.google.com/spreadsheets/d/.../export?format=csv&gid=0";
+const PAYMENTS_URL = "https://docs.google.com/spreadsheets/d/.../export?format=csv&gid=12345";
 
 // ======== THEME / TG ========
 const tg = window.Telegram?.WebApp; if (tg) { tg.ready(); tg.expand(); }
@@ -151,28 +150,122 @@ function parseAmount(raw){
   } else if (s.includes(',')) { s = s.replace(',', '.'); }
   const n = Number(s); return Number.isFinite(n)?n:0;
 }
-function fmt(n){ return n.toLocaleString('ru-RU',{maximumFractionDigits:2}); }
+const PLACEHOLDER = '—';
+function fmt(n){ return n.toLocaleString('ru-RU',{maximumFractionDigits:2,minimumFractionDigits:0}); }
 async function fetchCSV(url){ const res=await fetch(url,{cache:'no-store'}); if(!res.ok) throw new Error('HTTP '+res.status); const text=await res.text(); const parsed=Papa.parse(text,{header:true,skipEmptyLines:true}); return parsed.data; }
-function buildTbcUrl(iban){ const clean=(iban||'').trim(); return clean?`https://tbconline.ge/MB/TT/${clean}`:'https://tbconline.ge/MB/TT/'; }
+function normUsername(value){ return (value||'').trim().toLowerCase(); }
+function formatCurrency(amount){ return fmt(amount) + ' GEL'; }
+function disableLink(el){ el.href = '#'; el.setAttribute('aria-disabled','true'); el.classList.add('opacity-50','pointer-events-none'); }
+function enableLink(el, href){ el.href = href; el.removeAttribute('aria-disabled'); el.classList.remove('opacity-50','pointer-events-none'); }
+function parsePhotos(raw){ if(!raw) return []; return raw.split(/[\n,;\s]+/).map(s=>s.trim()).filter(Boolean).map(toDriveDirect); }
 
 // ======== RENDER ========
 async function loadAll(){
-  // Tenant
-  let tenantRows=[]; try{ tenantRows=await fetchCSV(SHEET_TENANT_CSV_URL);}catch(e){console.warn('tenant csv',e)}
-  const t=tenantRows[0]||{}; const owner=t.owner||t.Owner||''; const user=t.user||t.User||''; const phone=t.phone||t.Phone||''; const bina=t.bina_number||t.bina||t.number||''; const iban=t.account_money||t.Account_money||'';
-  document.getElementById('tenantMeta').textContent = [owner&&`Владелец: ${owner}`, user&&`Жилец: ${user}`, bina&&`Бина: ${bina}`, phone&&`Тел.: ${phone}`].filter(Boolean).join(' · ');
-  window._payUrl = buildTbcUrl(iban);
+  const totalEl = document.getElementById('totalAmount');
+  const tenantMetaEl = document.getElementById('tenantMeta');
+  const pdfEl = document.getElementById('pdfLink');
+  const photosLinkEl = document.getElementById('photosLink');
+  const photosGrid = document.getElementById('photosGrid');
+  const photosHint = document.getElementById('photosHint');
+  const paymentsBody = document.getElementById('paymentsBody');
 
-  // Payments
-  let payments=[]; try{ payments = await fetchCSV(SHEET_PAYMENTS_CSV_URL);}catch(e){ console.warn('payments csv',e); }
-  const body=document.getElementById('paymentsBody'); body.innerHTML=''; let total=0;
-  payments.forEach(p=>{ const date=p.date||p.Date||''; const desc=p.desc||p.Description||p.DESCRIPTION||''; const amt=parseAmount(p.amount||p.Amount||p.AMOUNT||'0'); total+=amt; const tr=document.createElement('tr'); tr.innerHTML=`<td class='py-2 pr-4 whitespace-nowrap text-slate-200'>${date}</td><td class='py-2 pr-4 text-slate-300'>${desc}</td><td class='py-2 pr-4 whitespace-nowrap text-slate-100'>${fmt(amt)}</td>`; body.appendChild(tr); });
-  document.getElementById('totalAmount').textContent = `${fmt(total)} GEL`;
+  totalEl.textContent = 'Загрузка...';
+  tenantMetaEl.textContent = '';
+  paymentsBody.innerHTML = '';
+  photosGrid.innerHTML = '';
+  photosHint.textContent = '';
+  disableLink(pdfEl);
+  disableLink(photosLinkEl);
 
-  // Photos
-  const grid=document.getElementById('photosGrid'); const hint=document.getElementById('photosHint'); grid.innerHTML='';
-  if(!PHOTOS.length){ hint.textContent='Нет фото'; } else { hint.textContent = `${PHOTOS.length} фото`; }
-  PHOTOS.forEach((url)=>{ const a=document.createElement('a'); a.href='#'; a.className='block rounded-2xl overflow-hidden bg-white/5 border border-white/10'; const fb1=toDriveThumbnail(url); const fb2=toDriveDownload(url); a.innerHTML=`<img src='${url}' alt='' referrerpolicy='no-referrer' class='w-full h-36 object-cover' onerror="if(this.dataset.fbk!=='1'){this.dataset.fbk='1';this.src='${fb1}';} else if(this.dataset.fbk!=='2'){this.dataset.fbk='2';this.src='${fb2}';} else {this.onerror=null;}">`; a.addEventListener('click', (e)=>{ e.preventDefault(); openLightbox(url);}); grid.appendChild(a); });
+  let tenantRows = [];
+  let paymentRows = [];
+  try {
+    [tenantRows, paymentRows] = await Promise.all([
+      fetchCSV(TENANTS_URL),
+      fetchCSV(PAYMENTS_URL)
+    ]);
+  } catch (err) {
+    console.warn('CSV load error', err);
+  }
+
+  const tgUsername = tg?.initDataUnsafe?.user?.username;
+  const normalizedUsername = normUsername(tgUsername);
+  const tenantRow = tenantRows.find((row) => normUsername(row.username) === normalizedUsername) || tenantRows[0] || {};
+
+  const owner = tenantRow.owner || tenantRow.landlord || PLACEHOLDER;
+  const tenantName = tenantRow.name || PLACEHOLDER;
+  const phone = tenantRow.phone || tenantRow.contact_phone || PLACEHOLDER;
+  const depositRaw = tenantRow.deposit;
+  const hasDeposit = depositRaw!=null && String(depositRaw).trim()!=='';
+  const depositValue = hasDeposit && /\d/.test(String(depositRaw)) ? parseAmount(depositRaw) : null;
+  const depositText = depositValue!=null ? `${fmt(depositValue)} ₾` : PLACEHOLDER;
+  const rentRaw = tenantRow.monthly_rent;
+  const hasRent = rentRaw!=null && String(rentRaw).trim()!=='';
+  const rentValue = hasRent && /\d/.test(String(rentRaw)) ? parseAmount(rentRaw) : null;
+  const rentText = rentValue!=null ? `${fmt(rentValue)} ₾` : PLACEHOLDER;
+  const petsText = tenantRow.pets || PLACEHOLDER;
+  const pdfLink = tenantRow.pdf_link || '';
+  const photosLink = tenantRow.photos_links || '';
+  const photos = parsePhotos(tenantRow.photos_links);
+  window._payUrl = pdfLink || photosLink || null;
+
+  tenantMetaEl.textContent = `Владелец: ${owner || PLACEHOLDER} · Жилец: ${tenantName} · Тел.: ${phone || PLACEHOLDER} · Депозит: ${depositText} · Аренда: ${rentText} · Питомцы: ${petsText}`;
+
+  if (pdfLink) {
+    enableLink(pdfEl, pdfLink);
+  } else {
+    disableLink(pdfEl);
+  }
+
+  if (photosLink) {
+    enableLink(photosLinkEl, photosLink);
+  } else {
+    disableLink(photosLinkEl);
+  }
+
+  const targetUsername = tenantRow.username ? normUsername(tenantRow.username) : normalizedUsername;
+  const tenantPayments = paymentRows.filter((row) => normUsername(row.username) === targetUsername);
+  let total = 0;
+  tenantPayments.forEach((payment) => {
+    const date = payment.date || PLACEHOLDER;
+    const desc = payment.income_outcome_name || payment.comment || PLACEHOLDER;
+    const amount = parseAmount(payment.amount);
+    total += amount;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td class='py-2 pr-4 whitespace-nowrap text-slate-200'>${date}</td><td class='py-2 pr-4 text-slate-300'>${desc}</td><td class='py-2 pr-4 whitespace-nowrap text-slate-100'>${fmt(amount)}</td>`;
+    paymentsBody.appendChild(tr);
+  });
+
+  if (!tenantPayments.length) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td colspan='3' class='py-4 text-center text-slate-400'>Нет платежей</td>`;
+    paymentsBody.appendChild(tr);
+  }
+
+  if (tenantPayments.length) {
+    totalEl.textContent = `Ваш доход: ${formatCurrency(total)}`;
+  } else {
+    totalEl.textContent = `Ваш доход: ${PLACEHOLDER}`;
+  }
+
+  if (!photos.length) {
+    photosHint.textContent = 'Нет фото';
+  } else {
+    photosHint.textContent = `${photos.length} фото`;
+    photos.forEach((url) => {
+      const a = document.createElement('a');
+      a.href = '#';
+      a.className = 'block rounded-2xl overflow-hidden bg-white/5 border border-white/10';
+      const fb1 = toDriveThumbnail(url);
+      const fb2 = toDriveDownload(url);
+      a.innerHTML = `<img src='${url}' alt='' referrerpolicy='no-referrer' class='w-full h-36 object-cover' onerror="if(this.dataset.fbk!=='1'){this.dataset.fbk='1';this.src='${fb1}';} else if(this.dataset.fbk!=='2'){this.dataset.fbk='2';this.src='${fb2}';} else {this.onerror=null;}">`;
+      a.addEventListener('click', (e) => {
+        e.preventDefault();
+        openLightbox(url);
+      });
+      photosGrid.appendChild(a);
+    });
+  }
 }
 function openLightbox(url){ const lb=document.getElementById('lightbox'); lb.querySelector('img').src=url; lb.classList.add('open'); }
 
