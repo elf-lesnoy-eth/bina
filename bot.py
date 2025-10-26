@@ -11,9 +11,6 @@ from aiogram.types import Message
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "8108367367:AAGgZXVaS0lVbacNjzcnVxoO1XddDSijD3M")
 
-TENANTS_URL = "https://docs.google.com/spreadsheets/d/.../export?format=csv&gid=0"
-PAYMENTS_URL = "https://docs.google.com/spreadsheets/d/.../export?format=csv&gid=12345"
-
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
