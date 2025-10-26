@@ -10,6 +10,10 @@ from aiogram.filters import CommandStart
 from aiogram.types import Message
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "8108367367:AAGgZXVaS0lVbacNjzcnVxoO1XddDSijD3M")
+# Google Sheets источники данных
+TENANTS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTJMucwthLrL_6GLDUUMBJymZEsqZ79nAjQ1eAW7oPU53RYFyh1ocl2Xl0SqUKjBWNaVQ0TlaJqRHRz/pub?gid=2073630276&single=true&output=csv"
+PAYMENTS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTJMucwthLrL_6GLDUUMBJymZEsqZ79nAjQ1eAW7oPU53RYFyh1ocl2Xl0SqUKjBWNaVQ0TlaJqRHRz/pub?gid=84433962&single=true&output=csv"
+
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
