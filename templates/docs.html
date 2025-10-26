@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>📷 Фото {{ username }}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-[#0b0f14] text-slate-100 p-6">
+  <h1 class="text-2xl font-semibold mb-4">📷 Фото арендатора {{ username }}</h1>
+  <iframe
+    src="https://drive.google.com/embeddedfolderview?id=1RuO83LdqOQ2BwwJX_ioR__fGijV_cA6G#grid"
+    class="w-full h-[80vh] rounded-2xl border border-white/10"
+    allow="autoplay">
+  </iframe>
+  <div class="mt-6">
+    <a href="/" class="text-sky-400 hover:text-sky-200">← Назад</a>
+  </div>
+</body>
+</html>
