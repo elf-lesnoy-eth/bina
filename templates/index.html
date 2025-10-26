@@ -15,9 +15,6 @@
   <style>
     .tile { background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02)); }
     .shadow-soft { box-shadow: 0 10px 30px rgba(0,0,0,.25); }
-    .lightbox{position:fixed;inset:0;background:rgba(0,0,0,.85);display:none;align-items:center;justify-content:center;z-index:50}
-    .lightbox.open{display:flex}
-    .lightbox img{max-width:92vw;max-height:86vh;border-radius:1rem}
   </style>
 </head>
 
@@ -40,11 +37,13 @@
       <div class="p-4 flex items-start justify-between">
         <div>
           <div class="text-base">Ваш доход</div>
-          <div id="totalAmount" class="text-4xl font-bold leading-none mt-2">0 GEL</div>
+          <div id="totalAmount" class="text-4xl font-bold leading-none mt-2">—</div>
         </div>
         <span class="px-2.5 py-1 rounded-lg text-[12px] bg-amber-400/10 text-amber-300 border border-amber-400/30">⚡ Energy</span>
       </div>
-      <div class="bg-emerald-500 text-slate-900 text-sm font-medium px-4 py-3">+ Комиссия 0% на первые 30 000 ₽</div>
+      <div class="bg-emerald-500 text-slate-900 text-sm font-medium px-4 py-3">
+        + Комиссия 0% на первые 30 000 ₽
+      </div>
       <div class="p-4 text-xs text-slate-400" id="tenantMeta"></div>
       <div class="px-4 pb-4 flex flex-wrap gap-3 text-sm">
         <a id="pdfLink" class="inline-flex items-center gap-1 text-sky-300 hover:text-sky-200 transition-colors" href="#" target="_blank">📄 Договор</a>
@@ -70,44 +69,54 @@
     </section>
   </div>
 
-  <!-- Lightbox -->
-  <div id="lightbox" class="lightbox" role="dialog" aria-modal="true"><img alt="" /></div>
-
-  <!-- JS Logic -->
   <script>
-    console.log("🚀 EasyHome script starting...");
+    console.log("🚀 EasyHome starting...");
 
     const TENANTS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTJMucwthLrL_6GLDUUMBJymZEsqZ79nAjQ1eAW7oPU53RYFyh1ocl2Xl0SqUKjBWNaVQ0TlaJqRHRz/pub?gid=2073630276&single=true&output=csv";
     const PAYMENTS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTJMucwthLrL_6GLDUUMBJymZEsqZ79nAjQ1eAW7oPU53RYFyh1ocl2Xl0SqUKjBWNaVQ0TlaJqRHRz/pub?gid=84433962&single=true&output=csv";
 
-    // --- определяем username ---
+    // --- получаем username ---
     const tg = window.Telegram?.WebApp;
     const urlParams = new URLSearchParams(window.location.search);
     const usernameFromUrl = urlParams.get("user");
-    const tgUsername = usernameFromUrl || tg?.initDataUnsafe?.user?.username || "elf_lesnoy";
-    const normalized = (tgUsername || "").trim().toLowerCase();
+    const tgUsername = usernameFromUrl || tg?.initDataUnsafe?.user?.username || "";
+    const normalized = normalizeUsername(tgUsername);
 
-    console.log("👤 Loaded username:", tgUsername);
+    console.log("👤 Username:", tgUsername, "→ normalized:", normalized);
 
-    if (tg) {
-      tg.ready();
-      tg.expand();
-    }
+    if (tg) { tg.ready(); tg.expand(); }
 
     // --- helpers ---
-    function normUsername(v){ return (v||'').trim().toLowerCase(); }
-    function parseAmount(v){ const n=parseFloat((v||'0').toString().replace(/[^\d.-]/g,'')); return isNaN(n)?0:n; }
-    async function fetchCSV(url){
-      const res = await fetch(url,{cache:'no-store'});
-      const text = await res.text();
-      return Papa.parse(text,{header:true,skipEmptyLines:true}).data;
+    function normalizeUsername(v) {
+      return (v || "").toString().trim().toLowerCase().replace(/^@/, "");
     }
-    function disableLink(el){ if(el){ el.href='#'; el.classList.add('opacity-50','pointer-events-none'); } }
-    function enableLink(el,href){ if(el){ el.href=href; el.classList.remove('opacity-50','pointer-events-none'); } }
-    function fmt(n){ try{ return Number(n).toLocaleString('ru-RU',{maximumFractionDigits:2}); }catch(e){return n;} }
+
+    function parseAmount(v) {
+      const n = parseFloat((v || "0").toString().replace(/[^\d.-]/g, ""));
+      return isNaN(n) ? 0 : n;
+    }
+
+    async function fetchCSV(url) {
+      const res = await fetch(url, { cache: "no-store" });
+      const text = await res.text();
+      return Papa.parse(text, { header: true, skipEmptyLines: true }).data;
+    }
+
+    function disableLink(el) {
+      if (el) { el.href = "#"; el.classList.add("opacity-50", "pointer-events-none"); }
+    }
+
+    function enableLink(el, href) {
+      if (el) { el.href = href; el.classList.remove("opacity-50", "pointer-events-none"); }
+    }
+
+    function fmt(n) {
+      try { return Number(n).toLocaleString("ru-RU", { maximumFractionDigits: 2 }); }
+      catch (e) { return n; }
+    }
 
     async function loadAll() {
-      console.log("🚀 EasyHome: loading data...");
+      console.log("📡 Loading data...");
       let tenants = [], payments = [];
       try {
         [tenants, payments] = await Promise.all([
@@ -116,38 +125,40 @@
         ]);
       } catch (err) {
         console.error("❌ CSV load error:", err);
-        document.getElementById('tenantMeta').textContent = "Ошибка загрузки данных";
+        document.getElementById("tenantMeta").textContent = "Ошибка загрузки данных";
         return;
       }
 
-      const tenant = tenants.find(r => normUsername(r.username) === normalized) || tenants[0];
+      const tenant = tenants.find(r => normalizeUsername(r.username) === normalized);
       if (!tenant) {
-        document.getElementById('tenantMeta').textContent = "Нет данных по пользователю";
+        document.getElementById("tenantMeta").textContent =
+          "❌ Нет данных по пользователю. Проверь, что username в Telegram совпадает с таблицей.";
+        document.getElementById("totalAmount").textContent = "—";
+        disableLink(document.getElementById("pdfLink"));
+        disableLink(document.getElementById("photosLink"));
+        document.getElementById("paymentsBody").innerHTML =
+          `<tr><td colspan="3" class="py-4 text-center text-slate-400">Нет платежей</td></tr>`;
         return;
       }
 
-      const meta = `Жилец: ${tenant.name || '—'} · Контракт: ${tenant.contract_start || '—'} — ${tenant.contract_end || '—'} · Аренда: ${tenant.monthly_rent || '—'} ₾ · Депозит: ${tenant.deposit || '—'} ₾ · Питомцы: ${tenant.pets || '—'}`;
-      document.getElementById('tenantMeta').textContent = meta;
+      const meta = `Жилец: ${tenant.name || "—"} · Контракт: ${tenant.contract_start || "—"} — ${tenant.contract_end || "—"} · Аренда: ${tenant.monthly_rent || "—"} ₾ · Депозит: ${tenant.deposit || "—"} ₾ · Питомцы: ${tenant.pets || "—"}`;
+      document.getElementById("tenantMeta").textContent = meta;
 
       const pdfLink = tenant.pdf_link?.trim() || "";
       const photosLink = tenant.photos_links?.trim() || "";
+      pdfLink ? enableLink(document.getElementById("pdfLink"), pdfLink) : disableLink(document.getElementById("pdfLink"));
+      photosLink ? enableLink(document.getElementById("photosLink"), photosLink) : disableLink(document.getElementById("photosLink"));
 
-      if (pdfLink) enableLink(document.getElementById('pdfLink'), pdfLink);
-      else disableLink(document.getElementById('pdfLink'));
-
-      if (photosLink) enableLink(document.getElementById('photosLink'), photosLink);
-      else disableLink(document.getElementById('photosLink'));
-
-      const tbody = document.getElementById('paymentsBody');
-      tbody.innerHTML = '';
-      const userPayments = payments.filter(p => normUsername(p.username) === normalized);
+      const tbody = document.getElementById("paymentsBody");
+      const userPayments = payments.filter(p => normalizeUsername(p.username) === normalized);
+      tbody.innerHTML = "";
       let total = 0;
       userPayments.forEach(p => {
         const amt = parseAmount(p.amount);
         total += amt;
         tbody.innerHTML += `<tr>
-          <td class="py-2 pr-4">${p.date || '—'}</td>
-          <td class="py-2 pr-4">${p.income_outcome_name || '—'}</td>
+          <td class="py-2 pr-4">${p.date || "—"}</td>
+          <td class="py-2 pr-4">${p.income_outcome_name || "—"}</td>
           <td class="py-2 pr-4">${fmt(amt)}</td>
         </tr>`;
       });
@@ -156,11 +167,11 @@
         tbody.innerHTML = `<tr><td colspan="3" class="py-4 text-center text-slate-400">Нет платежей</td></tr>`;
       }
 
-      document.getElementById('totalAmount').textContent = total ? `${fmt(total)} GEL` : "—";
-      console.log("💵 Total income:", total);
+      document.getElementById("totalAmount").textContent = total ? `${fmt(total)} GEL` : "—";
+      console.log("💰 Total income:", total);
     }
 
-    document.getElementById('refreshBtn').addEventListener('click', loadAll);
+    document.getElementById("refreshBtn").addEventListener("click", loadAll);
     loadAll();
   </script>
 </body>

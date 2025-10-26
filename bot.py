@@ -26,6 +26,12 @@ bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
 # === Вспомогательные функции ===
+def _normalize_username(username: str) -> str:
+    """Приводим username к единому виду: без @, в нижнем регистре."""
+    if not username:
+        return ""
+    return username.strip().lower().lstrip("@")
+
 def _format_decimal(value: Decimal | None) -> str:
     if value is None:
         return "—"
@@ -60,15 +66,18 @@ def _sum_amounts(rows: list[dict]) -> Decimal:
     return total
 
 def _filter_by_username(rows: list[dict], username: str) -> list[dict]:
-    username = (username or "").strip().lower()
-    return [r for r in rows if r.get("username", "").strip().lower() == username]
+    """Фильтруем строки таблицы по username (без учёта регистра и @)."""
+    normalized = _normalize_username(username)
+    return [
+        r for r in rows
+        if _normalize_username(r.get("username", "")) == normalized
+    ]
 
-
-# === Обработчик /start ===
+# === /start ===
 @dp.message(CommandStart())
 async def start_handler(message: Message) -> None:
     """
-    При вводе /start — показывает кнопку для открытия WebApp с username в URL
+    При вводе /start — показывает кнопку для открытия WebApp с username в URL.
     """
     username = message.from_user.username or "unknown_user"
     base_url = "https://bina-hc02.onrender.com"
@@ -87,8 +96,7 @@ async def start_handler(message: Message) -> None:
         reply_markup=keyboard
     )
 
-
-# === Дополнительно: /info показывает краткие данные напрямую ===
+# === /info — прямой просмотр данных ===
 @dp.message(lambda m: m.text and m.text.lower() == "/info")
 async def info_handler(message: Message) -> None:
     username = message.from_user.username if message.from_user else None
@@ -105,11 +113,12 @@ async def info_handler(message: Message) -> None:
     user_tenants = _filter_by_username(tenants_rows, username)
     user_payments = _filter_by_username(payments_rows, username)
 
-    if not user_tenants and not user_payments:
-        await message.answer("Не удалось найти твои данные в таблице.")
+    if not user_tenants:
+        await message.answer("❌ Не удалось найти твои данные в таблице.\n"
+                             "Проверь, что username в Telegram совпадает с тем, что указан в Google Sheet (без @).")
         return
 
-    tenant = user_tenants[0] if user_tenants else {}
+    tenant = user_tenants[0]
     total_income = _sum_amounts(user_payments)
 
     name = _safe_get(tenant, "name")
@@ -146,8 +155,7 @@ async def info_handler(message: Message) -> None:
 
     await message.answer("\n".join(message_lines), disable_web_page_preview=True)
 
-
-# === Запуск для Render ===
+# === Запуск ===
 async def start_bot():
     print("🤖 Telegram bot starting polling...")
     await dp.start_polling(bot)
