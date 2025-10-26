@@ -9,7 +9,7 @@ async def handle(request):
 
 
 async def main():
-    # создаем фиктивный web-сервер для Render
+    # создаем aiohttp web-сервер, чтобы Render видел открытый порт
     app = web.Application()
     app.router.add_get("/", handle)
 
@@ -22,7 +22,7 @@ async def main():
     print(f"🌐 Web server started on port {port}")
     print("🚀 Launching Telegram bot...")
 
-    # запускаем бота параллельно
+    # Запускаем Telegram-бота параллельно
     await start_bot()
 
 
