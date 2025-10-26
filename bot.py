@@ -3,26 +3,33 @@ import asyncio
 import csv
 import io
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
-
 import aiohttp
 from aiogram import Bot, Dispatcher
 from aiogram.filters import CommandStart
 from aiogram.types import Message
 
-BOT_TOKEN = os.getenv("BOT_TOKEN", "8108367367:AAGgZXVaS0lVbacNjzcnVxoO1XddDSijD3M")
-# Google Sheets источники данных
-TENANTS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTJMucwthLrL_6GLDUUMBJymZEsqZ79nAjQ1eAW7oPU53RYFyh1ocl2Xl0SqUKjBWNaVQ0TlaJqRHRz/pub?gid=2073630276&single=true&output=csv"
-PAYMENTS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTJMucwthLrL_6GLDUUMBJymZEsqZ79nAjQ1eAW7oPU53RYFyh1ocl2Xl0SqUKjBWNaVQ0TlaJqRHRz/pub?gid=84433962&single=true&output=csv"
 
+# === Конфигурация ===
+BOT_TOKEN = os.getenv("BOT_TOKEN", "8108367367:AAGgZXVaS0lVbacNjzcnVxoO1XddDSijD3M")
+
+# === Google Sheets источники данных ===
+TENANTS_URL = (
+    "https://docs.google.com/spreadsheets/d/e/2PACX-1vTJMucwthLrL_6GLDUUMBJymZEsqZ79nAjQ1eAW7oPU53RYFyh1ocl2Xl0SqUKjBWNaVQ0TlaJqRHRz/pub?"
+    "gid=2073630276&single=true&output=csv"
+)
+PAYMENTS_URL = (
+    "https://docs.google.com/spreadsheets/d/e/2PACX-1vTJMucwthLrL_6GLDUUMBJymZEsqZ79nAjQ1eAW7oPU53RYFyh1ocl2Xl0SqUKjBWNaVQ0TlaJqRHRz/pub?"
+    "gid=84433962&single=true&output=csv"
+)
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
 
+# === Вспомогательные функции ===
 def _format_decimal(value: Decimal | None) -> str:
     if value is None:
         return "—"
-    # Отображаем целые значения без копеек, десятичные - с двумя знаками
     quantized = (
         value.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
         if value == value.to_integral()
@@ -34,8 +41,7 @@ def _format_decimal(value: Decimal | None) -> str:
 
 def _safe_get(row: dict, key: str) -> str:
     value = row.get(key, "") if row else ""
-    value = value.strip()
-    return value or "—"
+    return value.strip() or "—"
 
 
 async def _fetch_csv(session: aiohttp.ClientSession, url: str) -> list[dict]:
@@ -53,18 +59,18 @@ def _sum_amounts(rows: list[dict]) -> Decimal:
         if not raw_amount:
             continue
         try:
-            amount = Decimal(raw_amount)
+            total += Decimal(raw_amount)
         except InvalidOperation:
             continue
-        total += amount
     return total
 
 
 def _filter_by_username(rows: list[dict], username: str) -> list[dict]:
     username = (username or "").strip().lower()
-    return [row for row in rows if row.get("username", "").strip().lower() == username]
+    return [r for r in rows if r.get("username", "").strip().lower() == username]
 
 
+# === Обработчики ===
 @dp.message(CommandStart())
 async def start_handler(message: Message) -> None:
     username = message.from_user.username if message.from_user else None
@@ -98,9 +104,8 @@ async def start_handler(message: Message) -> None:
     def _parse_decimal(raw: str) -> Decimal | None:
         if raw == "—":
             return None
-        normalized = raw.replace(" ", "")
         try:
-            return Decimal(normalized)
+            return Decimal(raw.replace(" ", ""))
         except InvalidOperation:
             return None
 
@@ -117,20 +122,14 @@ async def start_handler(message: Message) -> None:
         f"Сумма аренды: {monthly_rent_formatted}",
         f"Депозит: {deposit_formatted}",
         f"Животные: {pets}",
-        "📄 [Договор]({})".format(pdf_link) if pdf_link != "—" else "📄 Договор: —",
-        "📷 [Фото квартиры]({})".format(photos_link) if photos_link != "—" else "📷 Фото квартиры: —",
+        f"📄 [Договор]({pdf_link})" if pdf_link != "—" else "📄 Договор: —",
+        f"📷 [Фото квартиры]({photos_link})" if photos_link != "—" else "📷 Фото квартиры: —",
     ]
 
     await message.answer("\n".join(message_lines), disable_web_page_preview=True)
 
 
-async def main():
-    await dp.start_polling(bot)
-
-
+# === Запуск для Render ===
 async def start_bot():
+    print("🤖 Telegram bot starting polling...")
     await dp.start_polling(bot)
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
