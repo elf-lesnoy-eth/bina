@@ -1,46 +1,21 @@
 import asyncio
-import os
 from aiohttp import web
-from bot import start_bot
+from bot import bot, dp  # импорт твоего aiogram-бота
 
+async def index(request):
+    return web.FileResponse("templates/index.html")
 
-async def handle(request):
+async def health(request):
     return web.Response(text="✅ Bot is alive and serving HTTP requests!")
 
+async def on_startup(app):
+    print("🚀 Starting bot polling...")
+    asyncio.create_task(dp.start_polling(bot))  # бот стартует в фоне
 
-async def main():
-    print("🚀 [INIT] Starting Render process...")
-
-    # 1. Проверим PORT
-    port = int(os.environ.get("PORT", 8080))
-    print(f"🌐 [CONFIG] Using port = {port}")
-
-    # 2. Создаем aiohttp сервер
-    app = web.Application()
-    app.router.add_get("/", handle)
-    app.router.add_get("/health", handle)
-
-    runner = web.AppRunner(app)
-    await runner.setup()
-    print("🛠 [SERVER] Runner setup complete")
-
-    site = web.TCPSite(runner, "0.0.0.0", port)
-    await site.start()
-    print(f"✅ [SERVER] Listening on 0.0.0.0:{port}")
-
-    # 3. Запускаем бота
-    print("🤖 [BOT] Starting Telegram bot...")
-    try:
-        await start_bot()
-    except Exception as e:
-        print(f"❌ [BOT] Failed: {e}")
-        raise
-
-    print("🎉 [ALL OK] Bot and server running.")
-
+app = web.Application()
+app.router.add_get("/", index)
+app.router.add_get("/health", health)
+app.on_startup.append(on_startup)
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except Exception as e:
-        print(f"🔥 [FATAL] {e}")
+    web.run_app(app, host="0.0.0.0", port=10000)
