@@ -6,7 +6,7 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 import aiohttp
 from aiogram import Bot, Dispatcher
 from aiogram.filters import CommandStart
-from aiogram.types import Message
+from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
 
 
 # === Конфигурация ===
@@ -22,6 +22,7 @@ PAYMENTS_URL = (
     "gid=84433962&single=true&output=csv"
 )
 
+# === Telegram bot setup ===
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
@@ -73,6 +74,28 @@ def _filter_by_username(rows: list[dict], username: str) -> list[dict]:
 # === Обработчики ===
 @dp.message(CommandStart())
 async def start_handler(message: Message) -> None:
+    """
+    При вводе /start — показывает кнопку для открытия WebApp (index.html)
+    """
+    webapp_url = "https://bina-hc02.onrender.com"  # URL твоего Render web app
+
+    keyboard = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="Открыть EasyHome", web_app=WebAppInfo(url=webapp_url))]
+        ],
+        resize_keyboard=True
+    )
+
+    await message.answer(
+        "🏠 Добро пожаловать в EasyHome!\n\n"
+        "Нажми кнопку ниже, чтобы открыть приложение 👇",
+        reply_markup=keyboard
+    )
+
+
+# === Дополнительно: Команда /info для получения данных из Google Sheets ===
+@dp.message(lambda m: m.text and m.text.lower() == "/info")
+async def info_handler(message: Message) -> None:
     username = message.from_user.username if message.from_user else None
     if not username:
         await message.answer("Не удалось найти твои данные в таблице.")
@@ -133,3 +156,7 @@ async def start_handler(message: Message) -> None:
 async def start_bot():
     print("🤖 Telegram bot starting polling...")
     await dp.start_polling(bot)
+
+
+if __name__ == "__main__":
+    asyncio.run(start_bot())
