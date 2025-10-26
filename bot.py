@@ -8,7 +8,6 @@ from aiogram import Bot, Dispatcher
 from aiogram.filters import CommandStart
 from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
 
-
 # === Конфигурация ===
 BOT_TOKEN = os.getenv("BOT_TOKEN", "8108367367:AAGgZXVaS0lVbacNjzcnVxoO1XddDSijD3M")
 
@@ -26,7 +25,6 @@ PAYMENTS_URL = (
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-
 # === Вспомогательные функции ===
 def _format_decimal(value: Decimal | None) -> str:
     if value is None:
@@ -36,14 +34,11 @@ def _format_decimal(value: Decimal | None) -> str:
         if value == value.to_integral()
         else value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     )
-    parts = f"{quantized:,}".replace(",", " ")
-    return parts
-
+    return f"{quantized:,}".replace(",", " ")
 
 def _safe_get(row: dict, key: str) -> str:
     value = row.get(key, "") if row else ""
     return value.strip() or "—"
-
 
 async def _fetch_csv(session: aiohttp.ClientSession, url: str) -> list[dict]:
     async with session.get(url, timeout=10) as response:
@@ -51,7 +46,6 @@ async def _fetch_csv(session: aiohttp.ClientSession, url: str) -> list[dict]:
         text = await response.text()
     reader = csv.DictReader(io.StringIO(text))
     return list(reader)
-
 
 def _sum_amounts(rows: list[dict]) -> Decimal:
     total = Decimal("0")
@@ -65,19 +59,20 @@ def _sum_amounts(rows: list[dict]) -> Decimal:
             continue
     return total
 
-
 def _filter_by_username(rows: list[dict], username: str) -> list[dict]:
     username = (username or "").strip().lower()
     return [r for r in rows if r.get("username", "").strip().lower() == username]
 
 
-# === Обработчики ===
+# === Обработчик /start ===
 @dp.message(CommandStart())
 async def start_handler(message: Message) -> None:
     """
-    При вводе /start — показывает кнопку для открытия WebApp (index.html)
+    При вводе /start — показывает кнопку для открытия WebApp с username в URL
     """
-    webapp_url = "https://bina-hc02.onrender.com"  # URL твоего Render web app
+    username = message.from_user.username or "unknown_user"
+    base_url = "https://bina-hc02.onrender.com"
+    webapp_url = f"{base_url}?user={username}"  # передаём username в WebApp
 
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
@@ -87,18 +82,18 @@ async def start_handler(message: Message) -> None:
     )
 
     await message.answer(
-        "🏠 Добро пожаловать в EasyHome!\n\n"
+        f"🏠 Добро пожаловать, @{username}!\n\n"
         "Нажми кнопку ниже, чтобы открыть приложение 👇",
         reply_markup=keyboard
     )
 
 
-# === Дополнительно: Команда /info для получения данных из Google Sheets ===
+# === Дополнительно: /info показывает краткие данные напрямую ===
 @dp.message(lambda m: m.text and m.text.lower() == "/info")
 async def info_handler(message: Message) -> None:
     username = message.from_user.username if message.from_user else None
     if not username:
-        await message.answer("Не удалось найти твои данные в таблице.")
+        await message.answer("Не удалось определить твой Telegram username.")
         return
 
     async with aiohttp.ClientSession() as session:
@@ -140,11 +135,11 @@ async def info_handler(message: Message) -> None:
     deposit_formatted = _format_decimal(deposit_value)
 
     message_lines = [
-        f"Ваш доход: {total_income_formatted} GEL",
-        f"Имя: {name}",
-        f"Сумма аренды: {monthly_rent_formatted}",
-        f"Депозит: {deposit_formatted}",
-        f"Животные: {pets}",
+        f"💰 Доход: {total_income_formatted} GEL",
+        f"🏡 Имя: {name}",
+        f"📆 Аренда: {monthly_rent_formatted}",
+        f"💎 Депозит: {deposit_formatted}",
+        f"🐾 Питомцы: {pets}",
         f"📄 [Договор]({pdf_link})" if pdf_link != "—" else "📄 Договор: —",
         f"📷 [Фото квартиры]({photos_link})" if photos_link != "—" else "📷 Фото квартиры: —",
     ]
@@ -156,7 +151,6 @@ async def info_handler(message: Message) -> None:
 async def start_bot():
     print("🤖 Telegram bot starting polling...")
     await dp.start_polling(bot)
-
 
 if __name__ == "__main__":
     asyncio.run(start_bot())
