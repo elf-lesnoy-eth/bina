@@ -80,7 +80,7 @@ async def start_handler(message: Message) -> None:
     При вводе /start — показывает кнопку для открытия WebApp с username в URL.
     """
     username = message.from_user.username or "unknown_user"
-    base_url = "https://bina-hc02.onrender.com"
+    base_url = "https://bina-2.onrender.com"
     webapp_url = f"{base_url}?user={username}"  # передаём username в WebApp
 
     keyboard = ReplyKeyboardMarkup(
