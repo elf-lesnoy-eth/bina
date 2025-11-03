@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Virtual environments
+.venv/
+.venv1/
+
+# IDE configs
+.idea/
+*.iml
+.vscode/
+
+# macOS system files
+.DS_Store
+
+# Local data
+data/

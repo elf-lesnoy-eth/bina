@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>EasyHome — Dashboard</title>
+
+  <!-- Tailwind -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Telegram WebApp SDK -->
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <!-- PapaParse for CSV -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
+  <style>
+    .shadow-soft { box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+  </style>
+</head>
+
+<body class="min-h-screen bg-[#0b0f14] text-slate-100">
+  <div id="app" class="mx-auto max-w-3xl p-4 space-y-5">
+    <!-- Header -->
+    <header class="flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-xl grid place-items-center bg-emerald-500/15 text-emerald-300 text-lg">🏠</div>
+        <div class="flex items-center gap-2">
+          <h1 class="text-xl font-semibold tracking-wide">EasyHome</h1>
+          <span class="text-[11px] px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-300 border border-sky-500/30">verified</span>
+        </div>
+      </div>
+      <button id="refreshBtn" class="px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 transition-colors">🔄</button>
+    </header>
+
+    <!-- Revenue Card -->
+    <section class="rounded-2xl p-0 overflow-hidden shadow-soft bg-[#0f141a] border border-white/5">
+      <div class="p-4 flex items-start justify-between">
+        <div>
+          <div class="text-base">Ваш доход</div>
+          <div id="totalAmount" class="text-4xl font-bold leading-none mt-2">—</div>
+        </div>
+        <span class="px-2.5 py-1 rounded-lg text-[12px] bg-amber-400/10 text-amber-300 border border-amber-400/30">⚡ Energy</span>
+      </div>
+
+      <div class="bg-emerald-500 text-slate-900 text-sm font-medium px-4 py-3">
+        + Комиссия 0% на первые 30 000 ₽
+      </div>
+
+      <div class="p-4 text-xs text-slate-400" id="tenantMeta"></div>
+
+      <!-- Нижние кнопки -->
+      <div class="px-4 pb-4 grid grid-cols-3 gap-3 text-sm">
+        <a id="pdfLink" href="#" class="flex items-center justify-center rounded-xl py-2 bg-white/5 border border-white/10 text-sky-300 hover:bg-white/10 transition-all shadow-sm">
+          📄 Договор
+        </a>
+        <a id="photosLink" href="#" class="flex items-center justify-center rounded-xl py-2 bg-white/5 border border-white/10 text-sky-300 hover:bg-white/10 transition-all shadow-sm">
+          🖼️ Альбом
+        </a>
+        <button id="openPayments" class="flex items-center justify-center rounded-xl py-2 bg-white/5 border border-emerald-400/20 text-emerald-300 hover:bg-emerald-500/20 hover:text-emerald-200 transition-all shadow-sm">
+          📊 Статистика
+        </button>
+      </div>
+    </section>
+
+    <!-- Purchase Card -->
+    <section id="purchaseSection" class="rounded-2xl p-0 overflow-hidden shadow-soft bg-[#0f141a] border border-white/5 cursor-pointer hover:border-emerald-500/30 transition-all">
+      <div class="p-4 flex items-start justify-between">
+        <div>
+          <div class="text-base text-slate-100 font-medium">🏡 Приобретение недвижимости</div>
+          <p class="text-sm text-slate-400 mt-1 leading-relaxed max-w-md">
+            Мы подберём, оформим и подготовим квартиру под ключ.
+            Всё остальное — наша забота.
+          </p>
+        </div>
+        <span class="px-2.5 py-1 rounded-lg text-[12px] bg-emerald-400/10 text-emerald-300 border border-emerald-400/30">new</span>
+      </div>
+
+      <div class="bg-emerald-500 text-slate-900 text-sm font-medium px-4 py-4 text-center hover:bg-emerald-400 transition-colors">
+        🏠 Приобрести новую недвижимость
+      </div>
+    </section>
+  </div>
+
+  <!-- Popup: Недвижимость -->
+  <div id="popup" class="hidden fixed inset-0 bg-[#0b0f14]/95 backdrop-blur-sm flex flex-col items-center justify-center z-50 px-4">
+    <div class="max-w-lg bg-[#0f141a] border border-white/5 rounded-2xl shadow-soft p-6 text-slate-100 space-y-5">
+      <h2 class="text-2xl font-semibold text-center">🏡 EasyHome — недвижимость под ключ</h2>
+      <ul class="list-none text-slate-300 space-y-3 leading-relaxed">
+        <li>🏗️ Подбор и проверка объекта.</li>
+        <li>📜 Оформление и сопровождение сделки.</li>
+        <li>🧱 Ремонт и дизайн под ключ.</li>
+        <li>💰 Монетизация и сдача в аренду.</li>
+      </ul>
+      <p class="text-center text-emerald-400 font-medium">💎 Вы просто вносите средства — остальное делает EasyHome.</p>
+      <div class="text-center">
+        <button id="closePopup" class="mt-6 px-6 py-2.5 rounded-lg bg-emerald-500 text-slate-900 font-semibold hover:bg-emerald-400 transition-all shadow-md">Назад</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Popup: Платежи -->
+  <div id="paymentsPopup" class="hidden fixed inset-0 bg-[#0b0f14]/95 backdrop-blur-sm flex flex-col items-center justify-center z-50 px-4">
+    <div class="max-w-2xl w-full bg-[#0f141a] border border-white/5 rounded-2xl shadow-soft p-6 text-slate-100">
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-xl font-semibold">📊 История платежей</h2>
+        <button id="closePayments" class="px-3 py-1 rounded-md bg-emerald-500 text-slate-900 hover:bg-emerald-400 transition-colors font-medium">Закрыть</button>
+      </div>
+      <div class="overflow-x-auto max-h-[60vh] border-t border-white/10 mt-3">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="text-left text-slate-400">
+              <th class="py-2 pr-4">Дата</th>
+              <th class="py-2 pr-4">Описание</th>
+              <th class="py-2 pr-4">Сумма (GEL)</th>
+            </tr>
+          </thead>
+          <tbody id="paymentsBodyPopup"><tr><td colspan="3" class="py-6 text-center text-slate-500">Загрузка данных...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Popup: Договор -->
+  <div id="contractPopup" class="hidden fixed inset-0 bg-[#0b0f14]/95 backdrop-blur-sm flex flex-col items-center justify-center z-50 px-4">
+    <div class="max-w-3xl w-full bg-[#0f141a] border border-white/5 rounded-2xl shadow-soft p-4 text-slate-100 relative">
+      <button id="closeContract" class="absolute top-3 right-3 px-3 py-1 rounded-md bg-emerald-500 text-slate-900 hover:bg-emerald-400">✕</button>
+      <h2 class="text-xl font-semibold mb-4 text-center">📄 Ваш договор</h2>
+      <iframe id="contractFrame" src="" class="w-full h-[80vh] rounded-lg border border-white/10 bg-[#0b0f14]"></iframe>
+    </div>
+  </div>
+
+  <!-- Popup: Фото -->
+  <div id="photosPopup" class="hidden fixed inset-0 bg-[#0b0f14]/95 backdrop-blur-sm flex flex-col items-center justify-center z-50 px-4 overflow-y-auto">
+    <div class="max-w-5xl w-full bg-[#0f141a] border border-white/5 rounded-2xl shadow-soft p-4 text-slate-100 relative">
+      <button id="closePhotos" class="absolute top-3 right-3 px-3 py-1 rounded-md bg-emerald-500 text-slate-900 hover:bg-emerald-400">✕</button>
+      <h2 class="text-xl font-semibold mb-4 text-center">🖼️ Фото квартиры</h2>
+      <div id="photosGallery" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3"></div>
+    </div>
+  </div>
+
+  <script>
+    // --------------------
+    // Попапы
+    // --------------------
+    const popup = document.getElementById("popup");
+    const paymentsPopup = document.getElementById("paymentsPopup");
+    document.getElementById("purchaseSection").onclick = () => popup.classList.remove("hidden");
+    document.getElementById("closePopup").onclick = () => popup.classList.add("hidden");
+    document.getElementById("openPayments").onclick = () => paymentsPopup.classList.remove("hidden");
+    document.getElementById("closePayments").onclick = () => paymentsPopup.classList.add("hidden");
+    document.getElementById("closeContract").onclick = () => document.getElementById("contractPopup").classList.add("hidden");
+    document.getElementById("closePhotos").onclick = () => document.getElementById("photosPopup").classList.add("hidden");
+
+    // --------------------
+    // Основная логика
+    // --------------------
+    const TENANTS_URL =
+      "https://docs.google.com/spreadsheets/d/e/2PACX-1vTJMucwthLrL_6GLDUUMBJymZEsqZ79nAjQ1eAW7oPU53RYFyh1ocl2Xl0SqUKjBWNaVQ0TlaJqRHRz/pub?gid=2073630276&single=true&output=csv";
+    const PAYMENTS_URL =
+      "https://docs.google.com/spreadsheets/d/e/2PACX-1vTJMucwthLrL_6GLDUUMBJymZEsqZ79nAjQ1eAW7oPU53RYFyh1ocl2Xl0SqUKjBWNaVQ0TlaJqRHRz/pub?gid=84433962&single=true&output=csv";
+
+    const tg = window.Telegram?.WebApp;
+    const urlParams = new URLSearchParams(window.location.search);
+    const usernameFromUrl = urlParams.get("user");
+    const tgUsername = usernameFromUrl || tg?.initDataUnsafe?.user?.username || "";
+    const normalized = (v => (v || "").trim().toLowerCase().replace(/^@/, ""))(tgUsername);
+    if (tg) { tg.ready(); tg.expand(); }
+
+    async function fetchCSV(url) {
+      const res = await fetch(url, { cache: "no-store" });
+      const text = await res.text();
+      return Papa.parse(text, { header: true, skipEmptyLines: true }).data;
+    }
+
+    function parseAmount(v) {
+      const n = parseFloat((v || "0").replace(/[^\d.-]/g, ""));
+      return isNaN(n) ? 0 : n;
+    }
+
+    function fmt(n) {
+      try { return Number(n).toLocaleString("ru-RU", { maximumFractionDigits: 2 }); }
+      catch { return n; }
+    }
+
+    function toDrivePreview(url) {
+      if (!url) return "";
+      const id = (url.match(/[-\w]{25,}/) || [])[0];
+      return id ? `https://drive.google.com/file/d/${id}/preview` : url;
+    }
+
+    async function loadAll() {
+      let tenants = [], payments = [];
+      try {
+        [tenants, payments] = await Promise.all([fetchCSV(TENANTS_URL), fetchCSV(PAYMENTS_URL)]);
+      } catch {
+        document.getElementById("tenantMeta").textContent = "Ошибка загрузки данных";
+        return;
+      }
+
+      const tenant = tenants.find(r => (r.username || "").trim().toLowerCase() === normalized);
+      if (!tenant) {
+        document.getElementById("tenantMeta").textContent = "❌ Нет данных по пользователю.";
+        return;
+      }
+
+      // --- Метаинформация ---
+      document.getElementById("tenantMeta").textContent =
+        `Жилец: ${tenant.name || "—"} · Контракт: ${tenant.contract_start || "—"} — ${tenant.contract_end || "—"} · Аренда: ${tenant.monthly_rent || "—"} ₾`;
+
+      const pdfLink = (tenant.pdf_link || "").trim();
+      const photosField = (tenant.photos_links || "").trim();
+
+      // === ВЫЗОВ PYTHON СКАЧИВАНИЯ ===
+      if (pdfLink || photosField) {
+        try {
+          const query = new URLSearchParams({
+            username: normalized,
+            pdf: pdfLink,
+            photos: photosField
+          });
+          await fetch(`http://127.0.0.1:8080/download?${query.toString()}`);
+          console.log("📥 Файлы переданы на скачивание серверу.");
+        } catch (err) {
+          console.warn("⚠️ Не удалось связаться с локальным Flask:", err);
+        }
+      }
+
+      // === PDF ===
+      const pdfAnchor = document.getElementById("pdfLink");
+      pdfAnchor.onclick = (e) => {
+      e.preventDefault();
+      if (!pdfLink) return;
+
+      const localPath = `/data/${normalized}/contract.pdf`;
+      document.getElementById("contractFrame").src = localPath;
+      document.getElementById("contractPopup").classList.remove("hidden");
+    };
+
+
+      // === Фото ===
+      const photosAnchor = document.getElementById("photosLink");
+      photosAnchor.onclick = (e) => {
+        e.preventDefault();
+        if (!photosField) return;
+        const urls = photosField.split(",").map(u => {
+          const id = (u.match(/[-\w]{25,}/) || [])[0];
+          return id ? `https://lh3.googleusercontent.com/d/${id}=w1600` : null;
+        }).filter(Boolean);
+        const gallery = document.getElementById("photosGallery");
+        gallery.innerHTML = urls.map(u => `<img src="${u}" loading="lazy" class="rounded-lg border border-white/10 shadow-md w-full object-cover">`).join("");
+        document.getElementById("photosPopup").classList.remove("hidden");
+      };
+
+      // === Платежи ===
+      const paymentsBody = document.getElementById("paymentsBodyPopup");
+      const userPayments = payments.filter(p => (p.username || "").trim().toLowerCase() === normalized);
+      paymentsBody.innerHTML = "";
+      let total = 0;
+      if (userPayments.length === 0) {
+        paymentsBody.innerHTML = `<tr><td colspan="3" class="py-6 text-center text-slate-500">Нет платежей</td></tr>`;
+      } else {
+        userPayments.forEach(p => {
+          const amt = parseAmount(p.amount);
+          total += amt;
+          paymentsBody.innerHTML += `
+            <tr>
+              <td class="py-2 pr-4">${p.date || "—"}</td>
+              <td class="py-2 pr-4">${p.income_outcome_name || "—"}</td>
+              <td class="py-2 pr-4">${fmt(amt)}</td>
+            </tr>`;
+        });
+      }
+      document.getElementById("totalAmount").textContent = total ? `${fmt(total)} GEL` : "—";
+    }
+
+    document.getElementById("refreshBtn").onclick = loadAll;
+    loadAll();
+  </script>
+</body>
+</html>
